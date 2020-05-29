@@ -1,0 +1,324 @@
+---
+title: "Modeling and prediction for movies"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(statsr)
+library(GGally)
+```
+
+### Load data
+
+```{r load-data}
+#load("movies.Rdata")
+load("movies.Rdata")
+```
+
+
+
+* * *
+
+## Part 1: Data
+
+The data comes from the Rotten Tomatoes and IMDB databases, providing parameters for a random sample of movies.  Unfortunately, we're going to find that while the movies may be a random sample, the data itself is deeply flawed for making conclusions about the population.
+
+Generalizability
+
+While our population is not stated outright, let's assume that it's the US population.  Most of the movies are American, and we would expect a majority of the viewership and discussion in English to come from Americans.  IMDB and Rotten Tomatoes are not good sources for generalizing to the US population.  Their user scores rely on user participation.  Use of these sites tends to be majority male and skews towards the part of the public that uses the internet regularly.  At best, we will only be able to generalize to the portion of the public that engages with these sites.
+
+Causation
+
+As this is observational data, we will be able to draw no conclusions regarding causation.
+
+* * *
+
+## Part 2: Research question
+
+We have been tasked with determining what makes a movie popular.  In the business sense, this is valuable, as knowing the ingredients that drive popularity allow them to be reverse engineered in new film releases.  I have interpreted this initial question to mean popular to the average person.  Thus, we will be using User Scores from Rotten Tomatoes as a response variable.  As noted above, this is a flawed measure, but it is the best we have in the dataset.  The specific question then becomes:  **What factors explain the greatest amount of variability within movie Rotten Tomatoes user scores?**
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+#### Variables ####
+
+Of the variables provided, I intend to test the following as response:
+
+audience_score: Audience score on Rotten Tomatoes
+
+and the following as explanatory:
+
+title_type: Type of movie (Documentary, Feature Film, TV Movie)
+genre: Genre of movie (Action & Adventure, Comedy, Documentary, Drama, Horror, Mystery & Suspense, Other)
+
+runtime: Runtime of movie (in minutes)
+
+mpaa_rating: MPAA rating of the movie (G, PG, PG-13, R, Unrated)
+
+thtr_rel_month: Month the movie is released in theaters **potentially relevant given that people can see more movies closer to payday**
+
+thtr_rel_day: Day of the month the movie is released in theaters **potentially relevant given that people can see more movies closer to payday**
+
+critics_score: Critics score on Rotten Tomatoes
+
+best_pic_nom: Whether or not the movie was nominated for a best picture Oscar (no, yes)
+
+best_pic_win: Whether or not the movie won a best picture Oscar (no, yes)
+
+best_actor_win: Whether or not one of the main actors in the movie ever won an Oscar (no, yes) – note that this is not necessarily whether the 
+actor won an Oscar for their role in the given movie
+
+best_actress win: Whether or not one of the main actresses in the movie ever won an Oscar (no, yes) – not that this is not necessarily whether the actresses won an Oscar for their role in the given movie
+
+best_dir_win: Whether or not the director of the movie ever won an Oscar (no, yes) – not that this is not necessarily whether the director won an Oscar for the given movie
+
+I've excluded variables that are either irrelevant or contain too many levels (title, actors, links to sites, studio), imdb variables (since these are alternate response variables), and top box office (which also seems like another response variable of sorts).
+
+
+First, I will filter NA's out of the dataset and select the chosen variables.
+
+```{r}
+movies2 <- movies %>% filter(!is.na(runtime),!is.na(thtr_rel_month),!is.na(critics_score),!is.na(audience_score)) %>% select("title_type","genre","runtime","mpaa_rating","thtr_rel_month","thtr_rel_day","critics_score","best_pic_nom","best_pic_win","best_actor_win","best_actress_win","best_dir_win","audience_score")
+
+```
+Second, I want to get a general feel for the data.  We'll do this with a summary.
+
+```{r}
+
+summary(movies2)
+
+```
+
+**title_type** is mostly Feature Film.  I have my doubts we will get much use of this variable
+
+**genre** leans towards drama, but other genres are reasonably well represented
+
+**runtime** half of movies are between 92 and 116 minutes as we might expect.  Looks like there may be some sizable outliers, though.
+
+**mpaa_rating** has a pretty broad offering of ratings, though the amounts of G and NC-17 movies are small
+
+**thtr_rel_month** looks very evenly spread out with no real preference for time of year
+
+**thtr_rel_day** also looks evenly spread
+
+**critics_score** has a broad spread that appears to use the full range of scores
+
+**audience_score** also has a broad spread, but the band appears to be a bit tighter, with 50% of scores within 46-80
+
+All of the awards variables lean heavily towards "no" because there are many more movies that win no awards than those that do.
+
+Moving on, I want to get a sense of relative correlations and see what kind of collinearity might arise.  We have a lot of categorical variables that I will leave out of this plot.  I've already loaded GGally up above. 
+
+```{r}
+
+ggpairs(movies2,columns = c(4,8,16,18))
+
+```
+
+I don't see any collinearity issues here.  It is notable that critics_score seems highly correlated with our response variable.  I suspect that it will form the core of the model.  Let's take a look at plots of each of these numeric variables against audience_score
+
+```{r}
+ggplot(data = movies,aes(x=runtime,y=audience_score)) + geom_point() + stat_smooth(method=lm) + xlab("Runtime") + ylab("Audience Score")
+```
+
+There seems to be a reasonable linear relationship here, although the strength does not seem to be very strong.  I'm a bit curious about that outlier at the far right though.  Let's see what movie that is:
+
+```{r}
+
+movies2 <- movies %>% filter(!is.na(runtime))
+movies2[which(movies2$runtime == max(movies2$runtime)),1]
+
+```
+It's a documentary from the 80's.  I don't have any good reason to remove it at the moment.
+
+```{r}
+ggplot(data = movies,aes(x=thtr_rel_month,y=audience_score)) + geom_point() + stat_smooth(method=lm) + xlab("Month of Release") + ylab("Audience Score")
+
+```
+
+With a line that flat, I don't see much of a relationship here.  But I don't see any concerns about non-linearity.
+
+```{r}
+ggplot(data = movies,aes(x=critics_score,y=audience_score)) + geom_point() + stat_smooth(method=lm) + xlab("Critics Score") + ylab("Audience Score")
+
+```
+
+There's a clear and strong relationship here that also looks pretty linear.  My one concern is that there is a bit of a fan shape, which I'm not sure how to improve.
+
+
+* * *
+
+## Part 4: Modeling
+
+We will be using a stepwise backward elimination model using p-values based on a 90% threshold.  While I do want to arrive at a parsimonious model, I want to give all of these variables a chance and not go in with preconceived notions.
+
+```{r}
+m1 <- lm(audience_score~title_type+genre+runtime+mpaa_rating+thtr_rel_month+thtr_rel_day+critics_score+best_pic_nom+best_pic_win+best_actor_win+best_actress_win+best_dir_win,data=movies2)
+summary(m1)
+
+```
+
+The highest p-value here is best_dir_winyes- presumably because it's adding little that best pic nom and best pic win aren't already explaining.  Dropping that yields:
+
+```{r}
+
+m1 <- lm(audience_score~title_type+genre+runtime+mpaa_rating+thtr_rel_month+thtr_rel_day+critics_score+best_pic_nom+best_pic_win+best_actor_win+best_actress_win,data=movies2)
+summary(m1)
+
+```
+
+We still have plenty of insignificant variables, so we will proceed.  Next, we drop best_pic_winyes.
+
+```{r}
+
+m1 <- lm(audience_score~title_type+genre+runtime+mpaa_rating+thtr_rel_month+thtr_rel_day+critics_score+best_pic_nom+best_actor_win+best_actress_win,data=movies2)
+summary(m1)
+
+
+```
+
+Next, we remove thtr_rel_day
+
+```{r}
+
+m1 <- lm(audience_score~title_type+genre+runtime+mpaa_rating+thtr_rel_month+critics_score+best_pic_nom+best_actor_win+best_actress_win,data=movies2)
+summary(m1)
+
+```
+
+Next, we remove title_type
+
+```{r}
+
+m1 <- lm(audience_score~genre+runtime+mpaa_rating+thtr_rel_month+critics_score+best_pic_nom+best_actor_win+best_actress_win,data=movies2)
+summary(m1)
+
+```
+
+Next, we remove mpaa_rating
+
+```{r}
+
+m1 <- lm(audience_score~genre+runtime+thtr_rel_month+critics_score+best_pic_nom+best_actor_win+best_actress_win,data=movies2)
+summary(m1)
+
+```
+
+Next, we remove thtr_rel_month
+
+```{r}
+
+m1 <- lm(audience_score~genre+runtime+critics_score+best_pic_nom+best_actor_win+best_actress_win,data=movies2)
+summary(m1)
+
+```
+
+Next, we remove best_actor_winyes
+
+```{r}
+
+m1 <- lm(audience_score~genre+runtime+critics_score+best_pic_nom+best_actress_win,data=movies2)
+summary(m1)
+
+```
+
+Next, we remove best_actress_winyes
+
+```{r}
+
+m1 <- lm(audience_score~genre+runtime+critics_score+best_pic_nom,data=movies2)
+summary(m1)
+
+```
+
+I'm uncertain whether I want to remove genre.  As a factor variable, it shows up as 9 binary variables.  Some are significant, some are not, but if I remove one, I have to remove all.  Since the p-value isn't a great help here, let's see what happens to adjust R2 if we remove.
+
+```{r}
+m1 <- lm(audience_score~runtime+critics_score+best_pic_nom,data=movies2)
+summary(m1)
+
+```
+
+Ah- we see that Adjusted R2 decreased significantly from .5283 to .5012 when genre was removed.  This variable is likely accounting for some variability with a reasonable amount of significance for certain genres.  Therefore, the final model (with all of the other variables with p-value below .1) is this:
+
+```{r}
+
+m1 <- lm(audience_score~genre+runtime+critics_score+best_pic_nom,data=movies2)
+summary(m1)
+
+```
+
+### Interpretation of coefficients
+
+For genre, we can interpret each of the items above as modifiers of the intercept.  For a horror movie, we would expect the audience_score, on average, to be 8.41533 points lower than an action movie (action is level 0).
+
+For runtime, for every extra minute of runtime, we would expect, on average, the audience score to be .05607 points higher.
+
+For critics_score, for every extra critics point, we would expect, on average, the audience score to be ..43993 points higher.
+
+For best_pic_nom, we can interpret best_pic_nomyes as modifiers of the intercept.  For a best pic winner, we would expect the audience_score, on average, to be 8.8.77152 points higher than a movie that did not win best pic (best_pic_nom no is level 0.
+
+### Conditions for multiple linear regression
+
+Now that we have a final model, let's check to make sure that it meets the conditions of multple linear regression.  We can do that with the plot() function in base R.
+
+```{r}
+plot(m1)
+
+```
+
+#### Linearity
+
+The first plot shows that we do have a pretty strongly linear relationship, satisfying the linear condition of multiple regression.
+
+#### Near normal residuals
+
+The second Normal Q-Q plot shows we have nearly normal residuals.  Nearly all residuals are on the line or close to it.
+
+#### Constant variability
+
+The third plot is where we encounter a bit of a problem.  The variability of residuals is not constant (we would expect to see a straight red line if it was constant).  This isn't the worst case, but it isn't ideal.  I suspect that this relates to the problem I noted in the critics_score vs audience_score plot up in exploratory data analysis.  Critics and audiences agree very strongly on movies that critics rate very highly, but there is a much broader spread of audience scores for movies that critics do not like.
+
+* * *
+
+## Part 5: Prediction
+
+For the prediction, I've chosen Fantastic Beasts and Where to Find Them, which came out in 2016.  I am using data gathered from rottentomatoes here:
+
+https://www.rottentomatoes.com/m/fantastic_beasts_and_where_to_find_them
+
+```{r}
+
+newmov <- data.frame(title = "Fantastic Beasts",genre = "Science Fiction & Fantasy",runtime = 132,critics_score = 74,best_pic_nom = "no")
+predict(m1,newmov,interval = "prediction",level = 0.90)
+
+```
+
+We get a resulting 90% confidence interval of 38.99 - 87.38 for predicted audience_score.  We would expect 90% of the confidence intervals collected from similar samples to contain the true audience_score.
+
+And now, we can see that the true audience score for Fantastic Beasts - 79% - falls well within the predicted range.
+
+* * *
+
+## Part 6: Conclusion
+
+We ended up with a model that I canoot put much faith in.  .5283 for Adjusted R2 is pretty low.  There is a lot of unexplained variation.  Consequently, we end up with broad confidence intervals.  The confidence we interval we generated is even broader than the IQR for audience_score, so we aren't certain of much.
+
+Moreover, we had some concerns about constant variation especially within the relationship between audience_score and critics_score that throws the validity of the model into question.
+
+Also, recall that, even before that, there were concerns that this data was really only generalizable to the Rotten Tomatoes userbase.
+
+Ultimately, I'm not surprised that the explanatory power of the model was limited.  We considered a pretty small, easily accessed list of variables in the search to explain what makes movies popular on Rotten Tomatoes.  There are any number of additional factors (marketing budget, overall star power, whether the movie is a sequel, etc.) that likely would help to better explain the variation, but it would require significantly more web-scraping from varied sources and transformations of variables.
+
+

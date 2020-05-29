@@ -122,35 +122,34 @@ Moving on, I want to get a sense of relative correlations and see what kind of c
 
 ```{r}
 
-ggpairs(movies2,columns = c(4,8,16,18))
+ggpairs(movies2,columns = c(3,5,6,7,13))
 
 ```
 
 I don't see any collinearity issues here.  It is notable that critics_score seems highly correlated with our response variable.  I suspect that it will form the core of the model.  Let's take a look at plots of each of these numeric variables against audience_score
 
 ```{r}
-ggplot(data = movies,aes(x=runtime,y=audience_score)) + geom_point() + stat_smooth(method=lm) + xlab("Runtime") + ylab("Audience Score")
+ggplot(data = movies2,aes(x=runtime,y=audience_score)) + geom_point() + stat_smooth(method=lm) + xlab("Runtime") + ylab("Audience Score")
 ```
 
 There seems to be a reasonable linear relationship here, although the strength does not seem to be very strong.  I'm a bit curious about that outlier at the far right though.  Let's see what movie that is:
 
 ```{r}
 
-movies2 <- movies %>% filter(!is.na(runtime))
 movies2[which(movies2$runtime == max(movies2$runtime)),1]
 
 ```
 It's a documentary from the 80's.  I don't have any good reason to remove it at the moment.
 
 ```{r}
-ggplot(data = movies,aes(x=thtr_rel_month,y=audience_score)) + geom_point() + stat_smooth(method=lm) + xlab("Month of Release") + ylab("Audience Score")
+ggplot(data = movies2,aes(x=thtr_rel_month,y=audience_score)) + geom_point() + stat_smooth(method=lm) + xlab("Month of Release") + ylab("Audience Score")
 
 ```
 
 With a line that flat, I don't see much of a relationship here.  But I don't see any concerns about non-linearity.
 
 ```{r}
-ggplot(data = movies,aes(x=critics_score,y=audience_score)) + geom_point() + stat_smooth(method=lm) + xlab("Critics Score") + ylab("Audience Score")
+ggplot(data = movies2,aes(x=critics_score,y=audience_score)) + geom_point() + stat_smooth(method=lm) + xlab("Critics Score") + ylab("Audience Score")
 
 ```
 
@@ -313,7 +312,7 @@ And now, we can see that the true audience score for Fantastic Beasts - 79% - fa
 
 ## Part 6: Conclusion
 
-We ended up with a model that I canoot put much faith in.  .5283 for Adjusted R2 is pretty low.  There is a lot of unexplained variation.  Consequently, we end up with broad confidence intervals.  The confidence we interval we generated is even broader than the IQR for audience_score, so we aren't certain of much.
+We ended up with a model that I cannot put much faith in.  .5283 for Adjusted R2 is pretty low.  There is a lot of unexplained variation.  Consequently, we end up with broad confidence intervals.  The confidence we interval we generated is even broader than the IQR for audience_score, so we aren't certain of much.
 
 Moreover, we had some concerns about constant variation especially within the relationship between audience_score and critics_score that throws the validity of the model into question.
 
